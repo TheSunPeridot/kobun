@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>古文単語帳</title>
+<link rel="manifest" href="manifest.json"><meta name="theme-color" content="#3d5a6c"><link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{--bg:#f6f3ec;--fg:#2b2a27;--card:#fff;--ac:#3d5a6c;--mut:#807b70;--bd:#ddd6c6;--ok:#3b7a4f;--ng:#a8443a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1d1d1b;--fg:#e8e4da;--card:#2a2a27;--ac:#8fb3c7;--mut:#9a958a;--bd:#41403b;--ok:#79c08f;--ng:#e08b80;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#1d1d1b;--fg:#e8e4da;--card:#2a2a27;--ac:#8fb3c7;--mut:#9a958a;--bd:#41403b;--ok:#79c08f;--ng:#e08b80;color-scheme:dark}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--fg);font-family:"Hiragino Mincho ProN","Yu Mincho",serif;font-size:16px}
+body{max-width:560px;margin:0 auto;padding:12px 12px 80px}
+nav{display:flex;gap:6px;margin-bottom:12px}
+nav button{flex:1;padding:12px 0;border:1px solid var(--bd);background:var(--card);color:var(--fg);border-radius:8px;font:inherit}
+nav button.on{background:var(--ac);color:var(--bg);border-color:var(--ac)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px;margin-bottom:12px}
+button.b{width:100%;min-height:52px;font:inherit;font-size:18px;border:1px solid var(--ac);background:var(--ac);color:var(--bg);border-radius:10px;margin-top:8px}
+button.s{background:var(--card);color:var(--fg);border-color:var(--bd)}
+button.o{background:var(--ok);border-color:var(--ok);color:#fff}button.x{background:var(--ng);border-color:var(--ng);color:#fff}
+select,input,textarea{font:inherit;width:100%;padding:10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--fg);margin:4px 0 8px}
+label{font-size:14px;color:var(--mut)}
+.big{font-size:44px;text-align:center;margin:56px 0 16px;word-break:break-all}
+.ans{font-size:22px;text-align:center;min-height:60px;margin-bottom:8px}
+.mut{color:var(--mut);font-size:13px;text-align:center}
+.bar{height:8px;background:var(--bd);border-radius:4px;overflow:hidden;margin:6px 0}.bar i{display:block;height:100%;background:var(--ac)}
+.row{display:grid;grid-template-columns:44px 1fr 1fr;gap:4px;align-items:center;margin-bottom:6px}
+.row input,.row select{margin:0;padding:8px 4px;font-size:14px}
+.chk{background:#e9c46a55;border-radius:6px;padding:2px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+h3{margin:0 0 8px;font-size:16px}
+</style></head><body>
+<nav id="nav"></nav><div id="v"></div>
+<script>
+var POS=["動詞","形容詞","形容動詞","名詞","副詞","連語・その他","敬語"];
+var D={words:[],seq:1,unit:25,hist:[]},tab="study",S=null,img="";
+function load(){try{var t=localStorage.getItem("kobun1");if(t)D=Object.assign(D,JSON.parse(t))}catch(e){}}
+function save(){try{localStorage.setItem("kobun1",JSON.stringify(D))}catch(e){}}
+function $(i){return document.getElementById(i)}
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function nav(){var T=[["study","学習"],["words","単語"],["add","登録"],["stat","記録"]];$("nav").innerHTML=T.map(function(t){return'<button class="'+(tab==t[0]?"on":"")+'" onclick="go(\''+t[0]+'\')">'+t[1]+"</button>"}).join("")}
+function go(t){tab=t;S=null;render()}
+function render(){nav();({study:vStudy,words:vWords,add:vAdd,stat:vStat})[tab]()}
+function opts(a,sel){return a.map(function(x){return'<option'+(x[0]==sel?" selected":"")+' value="'+esc(x[0])+'">'+esc(x[1])+"</option>"}).join("")}
+function now(){return Date.now()}
+function unitList(p){var a=D.words.filter(function(w){return w.p==p}).sort(function(a,b){return a.o-b.o}),u=D.unit,r=[];for(var i=0;i<a.length;i+=u)r.push([i,Math.min(i+u,a.length)]);return{a:a,r:r}}
+/* 学習 */
+function vStudy(){
+ if(S&&S.q){return vQ()}
+ var cfg=D.cfg||{mode:"unit",p:POS[0],ui:0,n:10};
+ var ul=unitList(cfg.p),ro=ul.r.map(function(r,i){return[i,(r[0]+1)+"〜"+r[1]+"番目"]});
+ $("v").innerHTML='<div class="card"><label>出題モード</label><select id="m">'+opts([["unit","単元別学習"],["prio","優先単語学習（番号の若い順に重点）"],["prioord","優先単語・番号順"],["rand","ランダム学習"],["weak","苦手単語学習"],["new","未学習単語学習"],["due","復習期限が来た単語"]],cfg.mode)+'</select>'
+ +'<div id="ub" style="display:'+(cfg.mode=="unit"?"block":"none")+'"><label>品詞</label><select id="p" onchange="cfgSave();vStudy()">'+opts(POS.map(function(x){return[x,x]}),cfg.p)+'</select><label>範囲（掲載順）</label><select id="ui"><option value="-1">この品詞すべて</option>'+opts(ro,cfg.ui).replace(/selected/,"")+'</select></div>'
+ +'<label>出題数</label><select id="n">'+opts([5,10,20,30,50].map(function(x){return[x,x+"語"]}),cfg.n)+'</select>'
+ +'<button class="b" onclick="start()">学習スタート</button></div><div class="mut">登録語数 '+D.words.length+'</div>';
+ $("m").onchange=function(){cfgSave();vStudy()};
+ var ui=$("ui");if(ui)ui.value=cfg.ui;
+}
+function cfgSave(){var m=$("m"),p=$("p"),ui=$("ui"),n=$("n");D.cfg={mode:m?m.value:"unit",p:p?p.value:POS[0],ui:ui?+ui.value:-1,n:n?+n.value:10};save()}
+function pick(arr,n,wf){var out=[],a=arr.slice();while(out.length<n&&a.length){var t=0,ws=a.map(function(w){var x=wf(w);t+=x;return x}),r=Math.random()*t,i=0;while(i<a.length-1&&(r-=ws[i])>0)i++;out.push(a.splice(i,1)[0])}return out}
+function start(){
+ cfgSave();var c=D.cfg,W=D.words,q=[];
+ if(!W.length){alert("単語が登録されていません。「登録」から追加してください。");return}
+ if(c.mode=="unit"){var ul=unitList(c.p),a=ul.a;if(c.ui>=0&&ul.r[c.ui])a=a.slice(ul.r[c.ui][0],ul.r[c.ui][1]);q=pick(a,c.n,function(){return 1})}
+ else if(c.mode=="prio"){q=pick(W,c.n,function(w){return w.n!=null?1+30/w.n:1})}
+ else if(c.mode=="prioord"){q=W.filter(function(w){return w.n!=null}).sort(function(a,b){return a.n-b.n}).slice(0,c.n)}
+ else if(c.mode=="rand"){q=pick(W,c.n,function(){return 1})}
+ else if(c.mode=="weak"){q=pick(W.filter(function(w){return w.ng>0&&(w.ng>=w.ok||w.streak==0)}),c.n,function(w){return 1+w.ng-w.ok*0.5>0.2?1+w.ng:0.2})}
+ else if(c.mode=="new"){q=W.filter(function(w){return !w.last}).sort(function(a,b){return a.o-b.o}).slice(0,c.n)}
+ else{q=W.filter(function(w){return w.due&&w.due<=now()}).sort(function(a,b){return a.due-b.due}).slice(0,c.n)}
+ if(!q.length){alert("この条件に該当する単語がありません。");return}
+ S={q:q.map(function(w){return w.id}),i:0,show:false,ok:0,ng:0};vQ();
+}
+function byId(id){return D.words.filter(function(w){return w.id==id})[0]}
+function vQ(){
+ if(S.i>=S.q.length){$("v").innerHTML='<div class="card"><h3>おつかれさま</h3><div class="ans">正解 '+S.ok+' / 不正解 '+S.ng+'</div><button class="b" onclick="go(\'study\')">もどる</button></div>';return}
+ var w=byId(S.q[S.i]);
+ $("v").innerHTML='<div class="mut">'+(S.i+1)+" / "+S.q.length+'</div><div class="bar"><i style="width:'+(S.i/S.q.length*100)+'%"></i></div><div class="card"><div class="mut">'+esc(w.p)+(w.n!=null?" ・ 番号"+w.n:"")+'</div><div class="big">'+esc(w.w)+'</div><div class="ans">'+(S.show?esc(w.m||"（意味が未入力です）"):"")+"</div></div>"
+ +(S.show?'<div class="two"><button class="b x" onclick="ans(0)">×　わからない</button><button class="b o" onclick="ans(1)">○　わかった</button></div>':'<button class="b" onclick="S.show=true;vQ()">答えを見る</button>')
+ +'<button class="b s" onclick="S=null;render()">中止</button>';
+}
+var IV=[1,3,7,14,30];
+function ans(ok){var w=byId(S.q[S.i]);w.last=now();if(ok){w.ok++;w.streak=(w.streak||0)+1;w.due=now()+IV[Math.min(w.streak-1,4)]*864e5;S.ok++}else{w.ng++;w.streak=0;w.due=now()+864e5/2;S.ng++}
+ D.hist.push([now(),ok?1:0]);if(D.hist.length>500)D.hist.shift();save();S.i++;S.show=false;vQ()}
+/* 単語 */
+var fq="";
+function vWords(){
+ var L=D.words.slice().sort(function(a,b){return a.p==b.p?a.o-b.o:POS.indexOf(a.p)-POS.indexOf(b.p)}).filter(function(w){return !fq||(w.w+w.m).indexOf(fq)>=0||(fq=="要確認"&&w.chk)}).slice(0,100);
+ $("v").innerHTML='<div class="card"><label>1単元あたりの語数（単元の区切り）</label><input type="number" id="us" min="5" value="'+D.unit+'" onchange="D.unit=Math.max(5,+this.value||25);save()"><label>検索（「要確認」で要確認のみ）</label><input id="fq" value="'+esc(fq)+'" onchange="fq=this.value;vWords()"></div><div class="mut">先頭100件まで表示 / 全'+D.words.length+'語</div><div style="margin-top:8px">'
+ +L.map(function(w){return'<div class="card'+(w.chk?" chk":"")+'" style="padding:8px"><div class="row"><input type="number" placeholder="番号" value="'+(w.n==null?"":w.n)+'" onchange="ed('+w.id+',\'n\',this.value)"><input value="'+esc(w.w)+'" onchange="ed('+w.id+',\'w\',this.value)"><select onchange="ed('+w.id+',\'p\',this.value)">'+opts(POS.map(function(x){return[x,x]}),w.p)+'</select></div><input value="'+esc(w.m)+'" placeholder="現代語訳" onchange="ed('+w.id+',\'m\',this.value)" style="margin:0 0 4px"><div class="two"><button class="b s" style="min-height:40px;font-size:14px;margin:0" onclick="ed('+w.id+',\'chk\',0);vWords()">'+(w.chk?"確認済にする":"確認済")+'</button><button class="b s" style="min-height:40px;font-size:14px;margin:0" onclick="del('+w.id+')">削除</button></div></div>'}).join("")+"</div>";
+}
+function ed(id,k,v){var w=byId(id);if(k=="n")w.n=v===""?null:+v;else if(k=="chk")w.chk=0;else{w[k]=v.trim();if(k!="p")w.chk=w.chk&&!(w.w&&w.m)?1:0}save()}
+function del(id){if(confirm("削除しますか？")){D.words=D.words.filter(function(w){return w.id!=id});save();vWords()}}
+/* 登録 */
+function vAdd(){
+ $("v").innerHTML='<div class="card"><h3>索引画像（見ながら入力）</h3><div class="mut" style="text-align:left;margin-bottom:6px">このページでは自動OCRは使えません（外部の読み取りエンジンを読み込めないため）。画像を見ながら下の欄に入力するか、別のOCRアプリの結果を貼り付けてください。</div><input type="file" accept="image/*" id="f">'+(img?'<img src="'+img+'" style="width:100%;border-radius:8px">':"")+"</div>"
+ +'<div class="card"><h3>まとめて登録</h3><div class="mut" style="text-align:left;margin-bottom:6px">1行1語：番号,古語,品詞,意味（番号・品詞・意味は空でも可。番号は書いた分だけ優先度になります）</div><textarea id="t" rows="8" placeholder="1,あはれなり,形容動詞,しみじみと趣深い&#10;,つれづれなり,形容動詞,"></textarea><label>品詞が空の行の既定値</label><select id="dp">'+opts(POS.map(function(x){return[x,x]}),POS[0])+'</select><button class="b" onclick="bulk()">確認用に登録</button><div class="mut">意味や品詞が不明な行は「要確認」になります</div></div>'
+ +'<div class="card"><h3>バックアップ</h3><button class="b s" onclick="exp(\'json\')">JSON書き出し（全データのバックアップ）</button><button class="b s" onclick="exp(\'csv\')">CSV書き出し</button><button class="b s" onclick="undoRestore()">直前の復元を取り消す</button><label style="display:block;margin-top:8px">JSON/CSV読み込み（追加）</label><input type="file" id="imp" accept=".json,.csv,.txt"></div>';
+ $("f").onchange=function(){var f=this.files[0];if(!f)return;var r=new FileReader();r.onload=function(){img=r.result;vAdd()};r.readAsDataURL(f)};
+ $("imp").onchange=function(){var f=this.files[0];if(!f)return;var r=new FileReader();r.onload=function(){try{if(/\.json$/i.test(f.name)){restoreJSON(JSON.parse(r.result))}else{var b=D.words.length;parse(r.result,POS[0]);save();alert((D.words.length-b)+"語を追加しました");go("words")}}catch(e){alert("読み込めませんでした。現在のデータは変更されていません。")}};r.readAsText(f)};
+}
+function addW(n,w,p,m){w=(w||"").trim();if(!w)return;var okp=POS.indexOf(p)>=0;var nn=(n===""||n==null||isNaN(+n))?null:+n;D.words.push({id:D.seq++,w:w,m:(m||"").trim(),p:okp?p:POS[0],n:nn,o:D.seq,ok:0,ng:0,last:0,due:0,streak:0,chk:(!okp||!(m||"").trim())?1:0})}
+function parse(t,dp){t.split(/\r?\n/).forEach(function(l){if(!l.trim())return;var c=l.split(/[,\t，]/);addW(c[0],c[1],(c[2]||"").trim()||dp,c.slice(3).join(","))})}
+function bulk(){var t=$("t").value;if(!t.trim())return;var b=D.words.length;parse(t,$("dp").value);save();alert((D.words.length-b)+"語を登録しました。「単語」タブで内容を確認してください。");fq="要確認";go("words")}
+function dl(name,txt,type){var a=document.createElement("a");a.href=URL.createObjectURL(new Blob([txt],{type:type}));a.download=name;a.click()}
+function exp(k){if(k=="json")dl("kobun-backup-"+new Date().toISOString().slice(0,10)+".json",JSON.stringify({ver:2,words:D.words,seq:D.seq,unit:D.unit,cfg:D.cfg,hist:D.hist}),"application/json");else dl("kobun.csv","\ufeff"+D.words.map(function(w){return[w.n==null?"":w.n,w.w,w.p,String(w.m).replace(/,/g,"，")].join(",")}).join("\n"),"text/csv")}
+/* 記録 */
+function vStat(){
+ var W=D.words,done=W.filter(function(w){return w.last}).length,ok=0,ng=0;W.forEach(function(w){ok+=w.ok;ng+=w.ng});
+ var weak=W.filter(function(w){return w.ng>0&&w.streak==0}).sort(function(a,b){return b.ng-a.ng}).slice(0,30),due=W.filter(function(w){return w.due&&w.due<=now()}).length;
+ $("v").innerHTML='<div class="card"><h3>進捗</h3><div class="bar"><i style="width:'+(W.length?done/W.length*100:0)+'%"></i></div><div>学習済 '+done+' / '+W.length+' 語</div><div>通算 正解 '+ok+' ・ 不正解 '+ng+(ok+ng?' ・ 正答率 '+Math.round(ok/(ok+ng)*100)+'%':"")+'</div><div>復習期限が来た語 '+due+'</div></div>'
+ +POS.map(function(p){var a=W.filter(function(w){return w.p==p});if(!a.length)return"";var d=a.filter(function(w){return w.last}).length;return'<div class="card" style="padding:10px"><div>'+p+' <span class="mut">'+d+" / "+a.length+'</span></div><div class="bar"><i style="width:'+d/a.length*100+'%"></i></div></div>'}).join("")
+ +'<div class="card"><h3>苦手単語</h3>'+(weak.map(function(w){var t=w.ok+w.ng;return'<div>'+esc(w.w)+' <span class="mut">'+esc(w.m)+" ・ "+Math.round(w.ok/t*100)+"%（"+w.ok+"/"+t+"）</span></div>"}).join("")||'<div class="mut">まだありません</div>')+'</div>'
+ +'<button class="b s" onclick="if(confirm(\'学習記録だけをリセットしますか？\')){D.words.forEach(function(w){w.ok=w.ng=w.last=w.due=w.streak=0});D.hist=[];save();vStat()}">学習記録をリセット</button>';
+}
+function restoreJSON(j){var ws=Array.isArray(j)?j:j.words;if(!Array.isArray(ws)||!ws.length||!ws.every(function(w){return w&&typeof w.w=="string"}))throw 0;
+ var full=ws.every(function(w){return w.id!=null&&w.o!=null});
+ if(!full){var b=D.words.length;ws.forEach(function(w){addW(w.n,w.w,w.p,w.m)});save();alert((D.words.length-b)+"語を追加しました");go("words");return}
+ if(!confirm("バックアップ（"+ws.length+"語）で現在のデータ（"+D.words.length+"語）を置き換えますか？\n置き換え前のデータは端末内に自動退避されます。"))return;
+ try{localStorage.setItem("kobun1_prev",JSON.stringify(D))}catch(e){if(!confirm("退避に失敗しました。続けますか？"))return}
+ var mx=Math.max.apply(null,ws.map(function(w){return Math.max(+w.id||0,+w.o||0)}))+1;
+ D=Object.assign(D,{words:ws,seq:Math.max(+j.seq||0,mx),unit:j.unit||D.unit,cfg:j.cfg||D.cfg,hist:j.hist||D.hist});save();
+ var c={};try{c=JSON.parse(localStorage.getItem("kobun1")||"{}")}catch(e){}
+ alert(c.words&&c.words.length==ws.length?"復元しました："+ws.length+"語":"保存の確認に失敗しました。書き出したJSONを保管してください。");go("words")}
+function undoRestore(){var p=null;try{p=JSON.parse(localStorage.getItem("kobun1_prev")||"null")}catch(e){}
+ if(!p||!p.words){alert("退避データがありません");return}
+ if(!confirm("復元前のデータ（"+p.words.length+"語）に戻しますか？"))return;D=Object.assign(D,p);save();go("words")}
+try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
+try{if("serviceWorker" in navigator&&/^https?:/.test(location.protocol))navigator.serviceWorker.register("sw.js").catch(function(){})}catch(e){}
+load();render();
+</script></body></html>
