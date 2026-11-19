@@ -27,12 +27,15 @@ label{font-size:14px;color:var(--mut)}
 .chk{background:#e9c46a55;border-radius:6px;padding:2px}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 h3{margin:0 0 8px;font-size:16px}
+.memo{white-space:pre-wrap;text-align:left;line-height:1.7;border-top:1px solid var(--bd);padding-top:10px;margin-top:6px}
 </style></head><body>
 <nav id="nav"></nav><div id="v"></div>
 <script>
-var POS=["動詞","形容詞","形容動詞","名詞","副詞","連語・その他","敬語"];
+var POS=["動詞","形容詞","形容動詞","名詞","副詞","連語","その他","品詞不明"],LEG=["連語・その他","敬語"];
+function allPos(){return POS.concat(LEG.filter(function(l){return D.words.some(function(w){return w.p==l})}))}
+function posFor(c){return c&&POS.indexOf(c)<0?POS.concat([c]):POS}
 var D={words:[],seq:1,unit:25,hist:[]},tab="study",S=null,img="";
-function load(){try{var t=localStorage.getItem("kobun1");if(t)D=Object.assign(D,JSON.parse(t))}catch(e){}}
+function load(){try{var t=localStorage.getItem("kobun1");if(!t)return;var j=JSON.parse(t);if(j.ver!==3){try{localStorage.setItem("kobun1_pre3",t)}catch(e){}}D=Object.assign(D,j);migrate(D.words);D.ver=3;save()}catch(e){}}
 function save(){try{localStorage.setItem("kobun1",JSON.stringify(D))}catch(e){}}
 function $(i){return document.getElementById(i)}
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
@@ -48,7 +51,7 @@ function vStudy(){
  var cfg=D.cfg||{mode:"unit",p:POS[0],ui:0,n:10};
  var ul=unitList(cfg.p),ro=ul.r.map(function(r,i){return[i,(r[0]+1)+"〜"+r[1]+"番目"]});
  $("v").innerHTML='<div class="card"><label>出題モード</label><select id="m">'+opts([["unit","単元別学習"],["prio","優先単語学習（番号の若い順に重点）"],["prioord","優先単語・番号順"],["rand","ランダム学習"],["weak","苦手単語だけ（正解すると外れる）"],["new","未学習単語学習"],["due","復習期限が来た単語"]],cfg.mode)+'</select>'
- +'<div id="ub" style="display:'+(cfg.mode=="unit"?"block":"none")+'"><label>品詞</label><select id="p" onchange="cfgSave();vStudy()">'+opts(POS.map(function(x){return[x,x]}),cfg.p)+'</select><label>範囲（掲載順）</label><select id="ui"><option value="-1">この品詞すべて</option>'+opts(ro,cfg.ui).replace(/selected/,"")+'</select></div>'
+ +'<div id="ub" style="display:'+(cfg.mode=="unit"?"block":"none")+'"><label>品詞</label><select id="p" onchange="cfgSave();vStudy()">'+opts(allPos().map(function(x){return[x,x]}),cfg.p)+'</select><label>範囲（掲載順）</label><select id="ui"><option value="-1">この品詞すべて</option>'+opts(ro,cfg.ui).replace(/selected/,"")+'</select></div>'
  +'<label>出題数</label><select id="n">'+opts([5,10,20,30,50].map(function(x){return[x,x+"語"]}),cfg.n)+'</select>'
  +'<button class="b" onclick="start()">学習スタート</button><button class="b s" onclick="startWeak()">苦手単語だけ復習（'+D.words.filter(isWeak).length+'語）</button></div><div class="mut">登録語数 '+D.words.length+'</div>';
  $("m").onchange=function(){cfgSave();vStudy()};
@@ -76,7 +79,7 @@ function byId(id){return D.words.filter(function(w){return w.id==id})[0]}
 function vQ(){
  if(S.i>=S.q.length){$("v").innerHTML='<div class="card"><h3>おつかれさま</h3><div class="ans">正解 '+S.ok+' / 不正解 '+S.ng+'</div><button class="b" onclick="go(\'study\')">もどる</button></div>';return}
  var w=byId(S.q[S.i]);
- $("v").innerHTML='<div class="mut">'+(S.i+1)+" / "+S.q.length+'</div><div class="bar"><i style="width:'+(S.i/S.q.length*100)+'%"></i></div><div class="card"><div class="mut">'+esc(w.p)+(w.n!=null?" ・ 番号"+w.n:"")+'</div><div class="big">'+esc(w.w)+'</div><div class="ans">'+(S.show?esc(w.m||"（意味が未入力です）"):"")+"</div></div>"
+ $("v").innerHTML='<div class="mut">'+(S.i+1)+" / "+S.q.length+'</div><div class="bar"><i style="width:'+(S.i/S.q.length*100)+'%"></i></div><div class="card"><div class="mut">'+esc(w.p)+(w.n!=null?" ・ 番号"+w.n:"")+'</div><div class="big">'+esc(w.w)+'</div><div class="ans">'+(S.show?esc(w.m||"（意味が未入力です）"):"")+"</div>"+(S.show&&w.memo?'<div class="memo"><div class="mut" style="text-align:left">注釈・メモ</div>'+esc(w.memo)+"</div>":"")+"</div>"
  +(S.show?'<div class="two"><button class="b x" onclick="ans(0)">×　わからない</button><button class="b o" onclick="ans(1)">○　わかった</button></div>':'<button class="b" onclick="S.show=true;vQ()">答えを見る</button>')
  +'<button class="b s" onclick="S=null;render()">中止</button>';
 }
@@ -86,41 +89,59 @@ function ans(ok){var w=byId(S.q[S.i]);w.last=now();if(ok){w.ok++;w.streak=(w.str
 /* 単語 */
 var fq="";
 function vWords(){
- var L=D.words.slice().sort(function(a,b){return a.p==b.p?a.o-b.o:POS.indexOf(a.p)-POS.indexOf(b.p)}).filter(function(w){return !fq||(w.w+w.m).indexOf(fq)>=0||(fq=="要確認"&&w.chk)}).slice(0,100);
- $("v").innerHTML='<div class="card"><label>1単元あたりの語数（単元の区切り）</label><input type="number" id="us" min="5" value="'+D.unit+'" onchange="D.unit=Math.max(5,+this.value||25);save()"><label>検索（「要確認」で要確認のみ）</label><input id="fq" value="'+esc(fq)+'" onchange="fq=this.value;vWords()"></div><div class="mut">先頭100件まで表示 / 全'+D.words.length+'語</div><div style="margin-top:8px">'
- +L.map(function(w){return'<div class="card'+(w.chk?" chk":"")+'" style="padding:8px"><div class="row"><input type="number" placeholder="番号" value="'+(w.n==null?"":w.n)+'" onchange="ed('+w.id+',\'n\',this.value)"><input value="'+esc(w.w)+'" onchange="ed('+w.id+',\'w\',this.value)"><select onchange="ed('+w.id+',\'p\',this.value)">'+opts(POS.map(function(x){return[x,x]}),w.p)+'</select></div><input value="'+esc(w.m)+'" placeholder="現代語訳" onchange="ed('+w.id+',\'m\',this.value)" style="margin:0 0 4px"><div class="two"><button class="b s" style="min-height:40px;font-size:14px;margin:0" onclick="ed('+w.id+',\'chk\',0);vWords()">'+(w.chk?"確認済にする":"確認済")+'</button><button class="b s" style="min-height:40px;font-size:14px;margin:0" onclick="del('+w.id+')">削除</button></div></div>'}).join("")+"</div>";
+ var L=D.words.slice().sort(function(a,b){return a.p==b.p?a.o-b.o:POS.concat(LEG).indexOf(a.p)-POS.concat(LEG).indexOf(b.p)}).filter(function(w){return !fq||(w.w+w.m+(w.memo||"")).indexOf(fq)>=0||(fq=="要確認"&&w.chk)||(fq=="品詞未確認"&&isUV(w))}).slice(0,100);
+ $("v").innerHTML=uvCard()+'<div class="card"><label>1単元あたりの語数（単元の区切り）</label><input type="number" id="us" min="5" value="'+D.unit+'" onchange="D.unit=Math.max(5,+this.value||25);save()"><label>検索（「要確認」で要確認のみ）</label><input id="fq" value="'+esc(fq)+'" onchange="fq=this.value;vWords()"></div><div class="mut">先頭100件まで表示 / 全'+D.words.length+'語</div><div style="margin-top:8px">'
+ +L.map(function(w){return'<div class="card'+(w.chk||isUV(w)?" chk":"")+'" style="padding:8px"><div class="row"><input type="number" placeholder="番号" value="'+(w.n==null?"":w.n)+'" onchange="ed('+w.id+',\'n\',this.value)"><input value="'+esc(w.w)+'" onchange="ed('+w.id+',\'w\',this.value)"><select onchange="ed('+w.id+',\'p\',this.value)">'+opts(posFor(w.p).map(function(x){return[x,x]}),w.p)+'</select></div><input value="'+esc(w.m)+'" placeholder="現代語訳" onchange="ed('+w.id+',\'m\',this.value)" style="margin:0 0 4px"><textarea rows="2" placeholder="注釈・メモ（複数行可）" onchange="ed('+w.id+',\'memo\',this.value)" style="margin:0 0 4px">'+esc(w.memo||"")+'</textarea><div class="two"><button class="b s" style="min-height:40px;font-size:14px;margin:0" onclick="ed('+w.id+',\'chk\',0);vWords()">'+(w.chk||isUV(w)?"確認済にする":"確認済")+'</button><button class="b s" style="min-height:40px;font-size:14px;margin:0" onclick="del('+w.id+')">削除</button></div></div>'}).join("")+"</div>";
 }
-function ed(id,k,v){var w=byId(id);if(k=="n")w.n=v===""?null:+v;else if(k=="chk")w.chk=0;else{w[k]=v.trim();if(k!="p")w.chk=w.chk&&!(w.w&&w.m)?1:0}save()}
+function ed(id,k,v){var w=byId(id);if(k=="n")w.n=v===""?null:+v;else if(k=="chk"){w.chk=0;w.pc=1}else if(k=="memo")w.memo=nz(v);else{w[k]=v.trim();if(k=="p")w.pc=1;else w.chk=w.chk&&!(w.w&&w.m)?1:0}save()}
 function del(id){if(confirm("削除しますか？")){D.words=D.words.filter(function(w){return w.id!=id});save();vWords()}}
 /* 登録 */
 function vAdd(){
  $("v").innerHTML='<div class="card"><h3>索引画像（見ながら入力）</h3><div class="mut" style="text-align:left;margin-bottom:6px">このページでは自動OCRは使えません（外部の読み取りエンジンを読み込めないため）。画像を見ながら下の欄に入力するか、別のOCRアプリの結果を貼り付けてください。</div><input type="file" accept="image/*" id="f">'+(img?'<img src="'+img+'" style="width:100%;border-radius:8px">':"")+"</div>"
- +'<div class="card"><h3>まとめて登録</h3><div class="mut" style="text-align:left;margin-bottom:6px">1行1語：番号,古語,品詞,意味（番号・品詞・意味は空でも可。番号は書いた分だけ優先度になります）</div><textarea id="t" rows="8" placeholder="1,あはれなり,形容動詞,しみじみと趣深い&#10;,つれづれなり,形容動詞,"></textarea><label>品詞が空の行の既定値</label><select id="dp">'+opts(POS.map(function(x){return[x,x]}),POS[0])+'</select><button class="b" onclick="bulk()">確認用に登録</button><div class="mut">意味や品詞が不明な行は「要確認」になります</div></div>'
+ +oneCard()+'<div class="card"><h3>まとめて登録</h3><div class="mut" style="text-align:left;margin-bottom:6px">1行1語：番号,古語,品詞,意味,注釈（番号・品詞・意味・注釈は空でも可。注釈の改行は \n と書く。カンマを含む項目は " で囲む）。同じ古語は上書き確認が出ます。空欄の項目は既存の内容を消しません。</div><textarea id="t" rows="8" placeholder="1,あはれなり,形容動詞,しみじみと趣深い&#10;,つれづれなり,形容動詞,"></textarea><label>品詞が空の行の既定値</label><select id="dp">'+opts([["","指定なし（新規は品詞不明）"]].concat(POS.map(function(x){return[x,x]})),"")+'</select><button class="b" onclick="bulk()">確認用に登録</button><div class="mut">意味や品詞が不明な行は「要確認」になります</div></div>'
  +'<div class="card"><h3>バックアップ</h3><button class="b s" onclick="exp(\'json\')">JSON書き出し（全データのバックアップ）</button><button class="b s" onclick="exp(\'csv\')">CSV書き出し</button><button class="b s" onclick="undoRestore()">直前の復元を取り消す</button><label style="display:block;margin-top:8px">JSON/CSV読み込み（追加）</label><input type="file" id="imp" accept=".json,.csv,.txt"></div>';
  $("f").onchange=function(){var f=this.files[0];if(!f)return;var r=new FileReader();r.onload=function(){img=r.result;vAdd()};r.readAsDataURL(f)};
- $("imp").onchange=function(){var f=this.files[0];if(!f)return;var r=new FileReader();r.onload=function(){try{if(/\.json$/i.test(f.name)){restoreJSON(JSON.parse(r.result))}else{var b=D.words.length;parse(r.result,POS[0]);save();alert((D.words.length-b)+"語を追加しました");go("words")}}catch(e){alert("読み込めませんでした。現在のデータは変更されていません。")}};r.readAsText(f)};
+ $("imp").onchange=function(){var f=this.files[0];if(!f)return;var r=new FileReader();r.onload=function(){try{if(/\.json$/i.test(f.name)){restoreJSON(JSON.parse(r.result))}else{doRecs(recsOf(rowsOf(r.result),""))}}catch(e){alert("読み込めませんでした。現在のデータは変更されていません。")}};r.readAsText(f)};
 }
-function addW(n,w,p,m){w=(w||"").trim();if(!w)return;var okp=POS.indexOf(p)>=0;var nn=(n===""||n==null||isNaN(+n))?null:+n;D.words.push({id:D.seq++,w:w,m:(m||"").trim(),p:okp?p:POS[0],n:nn,o:D.seq,ok:0,ng:0,last:0,due:0,streak:0,chk:(!okp||!(m||"").trim())?1:0})}
-function parse(t,dp){t.split(/\r?\n/).forEach(function(l){if(!l.trim())return;var c=l.split(/[,\t，]/);addW(c[0],c[1],(c[2]||"").trim()||dp,c.slice(3).join(","))})}
-function bulk(){var t=$("t").value;if(!t.trim())return;var b=D.words.length;parse(t,$("dp").value);save();alert((D.words.length-b)+"語を登録しました。「単語」タブで内容を確認してください。");fq="要確認";go("words")}
+function nz(s){return String(s==null?"":s).replace(/^[\s\u3000\ufeff]+|[\s\u3000\ufeff]+$/g,"")}
+function migrate(ws){ws.forEach(function(w){if(w.memo==null)w.memo="";if(w.p=="動詞"&&w.pc===undefined)w.pc=0;if(LEG.indexOf(w.p)>=0&&!w.lg){w.lg=1;w.chk=1}})}
+function isUV(w){return w.p=="動詞"&&w.pc===0}
+function toRec(n,w,p,m,memo,dp){p=nz(p);if(!p&&dp)p=dp;if(POS.indexOf(p)<0&&LEG.indexOf(p)<0)p="";var nn=nz(n);return{n:(nn===""||isNaN(+nn))?null:+nn,w:nz(w),p:p,m:nz(m),memo:nz(memo)}}
+function findW(w){var k=nz(w);for(var i=0;i<D.words.length;i++)if(nz(D.words[i].w)==k)return D.words[i];return null}
+function mk(r){D.words.push({id:D.seq++,w:r.w,m:r.m,memo:r.memo,p:r.p||"品詞不明",n:r.n,o:D.seq,ok:0,ng:0,last:0,due:0,streak:0,chk:(!r.p||!r.m)?1:0,pc:1})}
+function diff(ex,r){var d=[];if(r.n!=null&&r.n!==ex.n)d.push(["番号",0,r.n,"n"]);if(r.p&&r.p!==ex.p)d.push(["品詞",0,r.p,"p"]);if(r.m&&r.m!==ex.m)d.push(["意味",0,r.m,"m"]);if(r.memo&&r.memo!==(ex.memo||""))d.push(["注釈",0,r.memo,"memo"]);return d}
+function applyRecs(recs){
+ var ups=[];recs.forEach(function(r){if(!r.w)return;var ex=findW(r.w),d=ex&&diff(ex,r);if(d&&d.length)ups.push(ex.w+"（"+d.map(function(x){return x[0]}).join("・")+"）")});
+ if(ups.length&&!confirm("すでに登録されている古語が"+ups.length+"語あります。新しい内容で上書きしますか？\n空欄の項目は変更せず、正解数・不正解数・最終学習日時・復習予定・掲載順は保持されます。\n\n"+ups.slice(0,8).join("\n")+(ups.length>8?"\n…ほか"+(ups.length-8)+"語":"")))return null;
+ var a=0,u=0;recs.forEach(function(r){if(!r.w)return;var ex=findW(r.w);if(!ex){mk(r);a++;return}var d=diff(ex,r);d.forEach(function(x){ex[x[3]]=x[2];if(x[3]=="p")ex.pc=1});if(d.length)u++});
+ return[a,u]}
+function doRecs(recs){var res=applyRecs(recs);if(!res)return;save();alert("追加 "+res[0]+"語 / 上書き "+res[1]+"語");go("words")}
+function rowsOf(t){t=t.replace(/^\ufeff/,"");var R=[],r=[],c="",q=0,i,ch;for(i=0;i<t.length;i++){ch=t[i];if(q){if(ch=='"'){if(t[i+1]=='"'){c+='"';i++}else q=0}else c+=ch}else if(ch=='"'&&c==="")q=1;else if(ch==","||ch=="\t"||ch=="，"){r.push(c);c=""}else if(ch=="\n"||ch=="\r"){if(ch=="\r"&&t[i+1]=="\n")i++;r.push(c);c="";R.push(r);r=[]}else c+=ch}r.push(c);R.push(r);return R.filter(function(r){return r.join("").trim()})}
+function recsOf(R,dp){if(R.length&&nz(R[0][1])=="古語")R=R.slice(1);return R.map(function(c){return toRec(c[0],c[1],c[2],c[3],c.slice(4).join(",").replace(/\\n/g,"\n"),dp)})}
+function bulk(){var t=$("t").value;if(!t.trim())return;doRecs(recsOf(rowsOf(t),$("dp").value))}
+function one(){var w=$("aw").value;if(!nz(w)){alert("古語を入力してください");return}doRecs([toRec($("an").value,w,$("aps").value,$("am").value,$("ame").value,"")])}
+function oneCard(){return'<div class="card"><h3>1語ずつ登録・上書き</h3><label>古語</label><input id="aw"><label>意味</label><input id="am"><label>注釈・メモ（複数行可）</label><textarea id="ame" rows="3"></textarea><div class="two"><div><label>品詞</label><select id="aps">'+opts([["","指定なし"]].concat(POS.map(function(x){return[x,x]})),"")+'</select></div><div><label>番号（任意）</label><input type="number" id="an"></div></div><button class="b" onclick="one()">登録（同じ古語は上書き確認）</button></div>'}
+function uvCard(){var n=D.words.filter(isUV).length,l=D.words.filter(function(w){return w.chk}).length,h="";if(n)h+='<div class="card"><h3>動詞の品詞確認</h3><div class="mut" style="text-align:left">以前の版では品詞不明の語も「動詞」に入っていました。品詞が未確認の動詞が'+n+'語あります。</div><button class="b s" onclick="fq=\'品詞未確認\';vWords()">未確認の動詞を1語ずつ確認する</button><button class="b s" onclick="allUnk()">未確認の動詞をすべて「品詞不明」にする</button></div>';if(l)h+='<button class="b s" style="margin-bottom:12px" onclick="fq=\'要確認\';vWords()">要確認の語を表示（'+l+'語）</button>';return h}
+function allUnk(){var a=D.words.filter(isUV);if(!a.length||!confirm("未確認の動詞"+a.length+"語を「品詞不明」に移します。実行前のデータは端末内に退避されます（「登録」タブの「直前の復元を取り消す」で戻せます）。"))return;try{localStorage.setItem("kobun1_prev",JSON.stringify(D))}catch(e){}a.forEach(function(w){w.p="品詞不明";w.pc=1});save();fq="";vWords()}
+function csvq(s){s=String(s==null?"":s);return/[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}
 function dl(name,txt,type){var a=document.createElement("a");a.href=URL.createObjectURL(new Blob([txt],{type:type}));a.download=name;a.click()}
-function exp(k){if(k=="json")dl("kobun-backup-"+new Date().toISOString().slice(0,10)+".json",JSON.stringify({ver:2,words:D.words,seq:D.seq,unit:D.unit,cfg:D.cfg,hist:D.hist}),"application/json");else dl("kobun.csv","\ufeff"+D.words.map(function(w){return[w.n==null?"":w.n,w.w,w.p,String(w.m).replace(/,/g,"，")].join(",")}).join("\n"),"text/csv")}
+function exp(k){if(k=="json")dl("kobun-backup-"+new Date().toISOString().slice(0,10)+".json",JSON.stringify({ver:3,words:D.words,seq:D.seq,unit:D.unit,cfg:D.cfg,hist:D.hist}),"application/json");else dl("kobun.csv","\ufeff番号,古語,品詞,意味,注釈\n"+D.words.map(function(w){return[w.n==null?"":w.n,w.w,w.p,w.m,w.memo||""].map(csvq).join(",")}).join("\n"),"text/csv")}
 /* 記録 */
 function vStat(){
  var W=D.words,done=W.filter(function(w){return w.last}).length,ok=0,ng=0;W.forEach(function(w){ok+=w.ok;ng+=w.ng});
  var weak=W.filter(function(w){return w.ng>0&&w.streak==0}).sort(function(a,b){return b.ng-a.ng}).slice(0,30),due=W.filter(function(w){return w.due&&w.due<=now()}).length;
  $("v").innerHTML='<div class="card"><h3>進捗</h3><div class="bar"><i style="width:'+(W.length?done/W.length*100:0)+'%"></i></div><div>学習済 '+done+' / '+W.length+' 語</div><div>通算 正解 '+ok+' ・ 不正解 '+ng+(ok+ng?' ・ 正答率 '+Math.round(ok/(ok+ng)*100)+'%':"")+'</div><div>復習期限が来た語 '+due+'</div></div>'
- +POS.map(function(p){var a=W.filter(function(w){return w.p==p});if(!a.length)return"";var d=a.filter(function(w){return w.last}).length;return'<div class="card" style="padding:10px"><div>'+p+' <span class="mut">'+d+" / "+a.length+'</span></div><div class="bar"><i style="width:'+d/a.length*100+'%"></i></div></div>'}).join("")
+ +allPos().map(function(p){var a=W.filter(function(w){return w.p==p});if(!a.length)return"";var d=a.filter(function(w){return w.last}).length;return'<div class="card" style="padding:10px"><div>'+p+' <span class="mut">'+d+" / "+a.length+'</span></div><div class="bar"><i style="width:'+d/a.length*100+'%"></i></div></div>'}).join("")
  +'<div class="card"><h3>苦手単語</h3>'+(weak.map(function(w){var t=w.ok+w.ng;return'<div>'+esc(w.w)+' <span class="mut">'+esc(w.m)+" ・ "+Math.round(w.ok/t*100)+"%（"+w.ok+"/"+t+"）</span></div>"}).join("")||'<div class="mut">まだありません</div>')+'</div>'
  +'<button class="b s" onclick="if(confirm(\'学習記録だけをリセットしますか？\')){D.words.forEach(function(w){w.ok=w.ng=w.last=w.due=w.streak=0});D.hist=[];save();vStat()}">学習記録をリセット</button>';
 }
 function restoreJSON(j){var ws=Array.isArray(j)?j:j.words;if(!Array.isArray(ws)||!ws.length||!ws.every(function(w){return w&&typeof w.w=="string"}))throw 0;
  var full=ws.every(function(w){return w.id!=null&&w.o!=null});
- if(!full){var b=D.words.length;ws.forEach(function(w){addW(w.n,w.w,w.p,w.m)});save();alert((D.words.length-b)+"語を追加しました");go("words");return}
+ if(!full){doRecs(ws.map(function(w){return toRec(w.n,w.w,w.p,w.m,w.memo,"")}));return}
  if(!confirm("バックアップ（"+ws.length+"語）で現在のデータ（"+D.words.length+"語）を置き換えますか？\n置き換え前のデータは端末内に自動退避されます。"))return;
  try{localStorage.setItem("kobun1_prev",JSON.stringify(D))}catch(e){if(!confirm("退避に失敗しました。続けますか？"))return}
  var mx=Math.max.apply(null,ws.map(function(w){return Math.max(+w.id||0,+w.o||0)}))+1;
- D=Object.assign(D,{words:ws,seq:Math.max(+j.seq||0,mx),unit:j.unit||D.unit,cfg:j.cfg||D.cfg,hist:j.hist||D.hist});save();
+ migrate(ws);D=Object.assign(D,{ver:3,words:ws,seq:Math.max(+j.seq||0,mx),unit:j.unit||D.unit,cfg:j.cfg||D.cfg,hist:j.hist||D.hist});save();
  var c={};try{c=JSON.parse(localStorage.getItem("kobun1")||"{}")}catch(e){}
  alert(c.words&&c.words.length==ws.length?"復元しました："+ws.length+"語":"保存の確認に失敗しました。書き出したJSONを保管してください。");go("words")}
 function undoRestore(){var p=null;try{p=JSON.parse(localStorage.getItem("kobun1_prev")||"null")}catch(e){}
